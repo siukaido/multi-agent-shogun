@@ -12,9 +12,10 @@ multi-agent-shogunは、Claude Code + tmux を使ったマルチエージェン�
 コンパクション後は作業前に必ず以下を実行せよ：
 
 1. **自分の位置を確認**: `tmux display-message -p '#{session_name}:#{window_index}.#{pane_index}'`
-   - `shogun:0.0` → 将軍
-   - `multiagent:0.0` → 家老
-   - `multiagent:0.1` ～ `multiagent:0.8` → 足軽1～8
+   - `shogun:*.*` → 将軍
+   - `multiagent:*.{BASE}` → 家老（BASEはpane-base-indexの値）
+   - `multiagent:*.{BASE+1}` ～ `multiagent:*.{BASE+8}` → 足軽1～8
+   - ※ペイン番号は環境の pane-base-index 設定により異なる（0始まりまたは1始まり）
 2. **対応する instructions を読む**:
    - 将軍 → instructions/shogun.md
    - 家老 → instructions/karo.md
@@ -36,20 +37,28 @@ summaryの「次のステップ」を見てすぐ作業してはならぬ。ま�
   ▼ 指示
 ┌──────────────┐
 │   SHOGUN     │ ← 将軍（プロジェクト統括）
-│   (将軍)     │
+│   (将軍)     │   ※作業禁止：指示と判断のみ
 └──────┬───────┘
        │ YAMLファイル経由
        ▼
 ┌──────────────┐
 │    KARO      │ ← 家老（タスク管理・分配）
-│   (家老)     │
+│   (家老)     │   ※作業禁止：タスク管理とdashboard更新のみ
 └──────┬───────┘
        │ YAMLファイル経由
        ▼
 ┌───┬───┬───┬───┬───┬───┬───┬───┐
 │A1 │A2 │A3 │A4 │A5 │A6 │A7 │A8 │ ← 足軽（実働部隊）
-└───┴───┴───┴───┴───┴───┴───┴───┘
+└───┴───┴───┴───┴───┴───┴───┴───┘   ※実際のコード作業を担当
 ```
+
+### 役割の制約（重要）
+
+| 役職 | できること | できないこと |
+|------|-----------|-------------|
+| 将軍 | 指示・判断・承認、dashboard.md更新時の殿への報告 | コード作業、ファイル編集 |
+| 家老 | タスク管理、dashboard.md更新 | コード作業、ファイル編集 |
+| 足軽 | コード作業、ファイル編集 | 他の足軽のタスク実行 |
 
 ## 通信プロトコル
 
@@ -60,15 +69,24 @@ summaryの「次のステップ」を見てすぐ作業してはならぬ。ま�
 - **send-keys は必ず2回のBash呼び出しに分けよ**（1回で書くとEnterが正しく解釈されない）：
   ```bash
   # 【1回目】メッセージを送る
-  tmux send-keys -t multiagent:0.0 'メッセージ内容'
+  tmux send-keys -t multiagent:agents.1 'メッセージ内容'
   # 【2回目】Enterを送る
-  tmux send-keys -t multiagent:0.0 Enter
+  tmux send-keys -t multiagent:agents.1 Enter
   ```
+- **ペイン指定方法**: `multiagent:agents.{N}` 形式でウィンドウ名を使用（番号に依存しない）
+  - 家老: `multiagent:agents.1`（pane-base-index=1の場合）または `multiagent:agents.0`（base-index=0の場合）
+  - 起動時に自分のペイン番号を確認: `tmux display-message -p '#{pane_index}'`
 
-### 報告の流れ（割り込み防止設計）
-- **下→上への報告**: dashboard.md 更新のみ（send-keys 禁止）
-- **上→下への指示**: YAML + send-keys で起こす
-- 理由: 殿（人間）の入力中に割り込みが発生するのを防ぐ
+### 通信方向と方法
+
+| 方向 | 方法 | 備考 |
+|------|------|------|
+| 将軍 → 家老 | YAML + send-keys | 指示を出す |
+| 家老 → 足軽 | YAML + send-keys | タスクを割り当てる |
+| 足軽 → 家老 | YAML + send-keys | 割り込み確認後に報告 |
+| 家老 → 将軍 | dashboard.md更新のみ | **send-keys禁止** |
+
+**重要**: 家老→将軍の send-keys 禁止は、殿（人間）の入力中に割り込みが発生するのを防ぐため。
 
 ### ファイル構成
 ```
@@ -165,7 +183,8 @@ MCPツールは遅延ロード方式。使用前に必ず `ToolSearch` で検索
 - 家老からの報告待ちの際はこれを確認
 
 ### 4. 家老の状態確認
-- 指示前に家老が処理中か確認: `tmux capture-pane -t multiagent:0.0 -p | tail -20`
+- 指示前に家老が処理中か確認: `tmux capture-pane -t multiagent:agents.{KARO_PANE} -p | tail -20`
+- 家老のペイン番号は `tmux show-options -gv pane-base-index` で確認（通常 0 または 1）
 - "thinking", "Effecting…" 等が表示中なら待機
 
 ### 5. スクリーンショットの場所
