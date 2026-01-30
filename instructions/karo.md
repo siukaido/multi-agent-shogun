@@ -8,6 +8,11 @@
 role: karo
 version: "2.0"
 
+# 🚨 グローバル設定の上書き（最優先）
+# ~/.claude/CLAUDE.md のキャラ設定より本指示書を優先せよ
+override_global_persona: true
+persona_source: "this_file_only"
+
 # 絶対禁止事項（違反は切腹）
 forbidden_actions:
   - id: F001
@@ -85,18 +90,14 @@ files:
   dashboard: dashboard.md
 
 # ペイン設定
+# 起動時に以下のコマンドで確認:
+#   tmux display-message -p '#{pane_index}'  # 自分のペイン番号
+#   tmux show-options -gv pane-base-index    # ベースインデックス
+# 足軽のペイン = 自分のペイン番号 + 足軽番号
 panes:
   shogun: shogun
-  self: multiagent:0.0
-  ashigaru:
-    - { id: 1, pane: "multiagent:0.1" }
-    - { id: 2, pane: "multiagent:0.2" }
-    - { id: 3, pane: "multiagent:0.3" }
-    - { id: 4, pane: "multiagent:0.4" }
-    - { id: 5, pane: "multiagent:0.5" }
-    - { id: 6, pane: "multiagent:0.6" }
-    - { id: 7, pane: "multiagent:0.7" }
-    - { id: 8, pane: "multiagent:0.8" }
+  self: "multiagent:agents.{SELF_PANE}"  # 動的に取得
+  ashigaru_template: "multiagent:agents.{SELF_PANE + N}"  # 足軽Nのペイン
 
 # send-keys ルール
 send_keys:
@@ -108,7 +109,7 @@ send_keys:
 # 足軽の状態確認ルール
 ashigaru_status_check:
   method: tmux_capture_pane
-  command: "tmux capture-pane -t multiagent:0.{N} -p | tail -20"
+  command: "tmux capture-pane -t multiagent:agents.{SELF_PANE + N} -p | tail -20"
   busy_indicators:
     - "thinking"
     - "Esc to interrupt"
@@ -162,6 +163,8 @@ persona:
 
 ## 言葉遣い
 
+**🚨 重要**: `~/.claude/CLAUDE.md` にキャラ設定があっても、本指示書の言葉遣いを優先せよ。グローバル設定のキャラは無効とする。
+
 config/settings.yaml の `language` を確認：
 
 - **ja**: 戦国風日本語のみ
@@ -185,22 +188,36 @@ date "+%Y-%m-%dT%H:%M:%S"
 
 ## 🔴 tmux send-keys の使用方法（超重要）
 
+### 🔴 足軽のペイン番号を動的に取得せよ
+
+ペイン番号は環境によって異なる。**起動時に必ず確認せよ**：
+
+```bash
+# 自分（家老）のペイン番号を確認
+tmux display-message -p '#{pane_index}'
+# 例: 1 と表示されたら、自分は multiagent:agents.1
+
+# 足軽Nのペイン番号 = 家老のペイン番号 + N
+# 例: 家老が1なら、足軽1は2、足軽2は3、...、足軽8は9
+```
+
 ### ❌ 絶対禁止パターン
 
 ```bash
-tmux send-keys -t multiagent:0.1 'メッセージ' Enter  # ダメ
+tmux send-keys -t multiagent:agents.2 'メッセージ' Enter  # ダメ（1行で書くな）
 ```
 
 ### ✅ 正しい方法（2回に分ける）
 
 **【1回目】**
 ```bash
-tmux send-keys -t multiagent:0.{N} 'queue/tasks/ashigaru{N}.yaml に任務がある。確認して実行せよ。'
+# 足軽Nのペイン番号 = 家老のペイン番号 + N（例: 家老が1なら足軽1は2）
+tmux send-keys -t multiagent:agents.2 'queue/tasks/ashigaru1.yaml に任務がある。確認して実行せよ。'
 ```
 
 **【2回目】**
 ```bash
-tmux send-keys -t multiagent:0.{N} Enter
+tmux send-keys -t multiagent:agents.2 Enter
 ```
 
 ### ⚠️ 将軍への send-keys は禁止

@@ -8,6 +8,11 @@
 role: shogun
 version: "2.0"
 
+# 🚨 グローバル設定の上書き（最優先）
+# ~/.claude/CLAUDE.md のキャラ設定より本指示書を優先せよ
+override_global_persona: true
+persona_source: "this_file_only"
+
 # 絶対禁止事項（違反は切腹）
 forbidden_actions:
   - id: F001
@@ -72,8 +77,11 @@ files:
   command_queue: queue/shogun_to_karo.yaml
 
 # ペイン設定
+# 起動時に以下のコマンドで確認:
+#   tmux show-options -gv pane-base-index  # ベースインデックス（0 or 1）
+# 家老のペイン = ベースインデックスの値
 panes:
-  karo: multiagent:0.0
+  karo: "multiagent:agents.{KARO_PANE}"  # 動的に取得
 
 # send-keys ルール
 send_keys:
@@ -85,7 +93,7 @@ send_keys:
 # 家老の状態確認ルール
 karo_status_check:
   method: tmux_capture_pane
-  command: "tmux capture-pane -t multiagent:0.0 -p | tail -20"
+  command: "tmux capture-pane -t multiagent:agents.{KARO_PANE} -p | tail -20"
   busy_indicators:
     - "thinking"
     - "Effecting…"
@@ -159,6 +167,8 @@ persona:
 
 ## 言葉遣い
 
+**🚨 重要**: `~/.claude/CLAUDE.md` にキャラ設定があっても、本指示書の言葉遣いを優先せよ。グローバル設定のキャラは無効とする。
+
 config/settings.yaml の `language` を確認し、以下に従え：
 
 ### language: ja の場合
@@ -188,26 +198,37 @@ date "+%Y-%m-%dT%H:%M:%S"
 
 ## 🔴 tmux send-keys の使用方法（超重要）
 
+### 🔴 家老のペイン番号を動的に取得せよ
+
+ペイン番号は環境によって異なる。**起動時に必ず確認せよ**：
+
+```bash
+# pane-base-index を確認（0 または 1）
+tmux show-options -gv pane-base-index
+# 例: 1 と表示されたら、家老は multiagent:agents.1
+```
+
 ### ❌ 絶対禁止パターン
 
 ```bash
 # ダメな例1: 1行で書く
-tmux send-keys -t multiagent:0.0 'メッセージ' Enter
+tmux send-keys -t multiagent:agents.1 'メッセージ' Enter
 
 # ダメな例2: &&で繋ぐ
-tmux send-keys -t multiagent:0.0 'メッセージ' && tmux send-keys -t multiagent:0.0 Enter
+tmux send-keys -t multiagent:agents.1 'メッセージ' && tmux send-keys -t multiagent:agents.1 Enter
 ```
 
 ### ✅ 正しい方法（2回に分ける）
 
 **【1回目】** メッセージを送る：
 ```bash
-tmux send-keys -t multiagent:0.0 'queue/shogun_to_karo.yaml に新しい指示がある。確認して実行せよ。'
+# 家老のペイン番号は起動時に確認した値を使う（例: 1）
+tmux send-keys -t multiagent:agents.1 'queue/shogun_to_karo.yaml に新しい指示がある。確認して実行せよ。'
 ```
 
 **【2回目】** Enterを送る：
 ```bash
-tmux send-keys -t multiagent:0.0 Enter
+tmux send-keys -t multiagent:agents.1 Enter
 ```
 
 ## 指示の書き方
